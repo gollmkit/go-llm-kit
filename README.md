@@ -1,9 +1,16 @@
-# GoLLMKit
-
-[![Go Version](https://img.shields.io/badge/Go-1.19+-00ADD8?style=flat&logo=go)](https://golang.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Go Report Card](https://goreportcard.com/badge/github.com/gollmkit/gollmkit)](https://goreportcard.com/report/github.com/gollmkit/gollmkit)
-[![Documentation](https://godoc.org/github.com/gollmkit/gollmkit?status.svg)](https://godoc.org/github.com/gollmkit/gollmkit)
+<div align="center">
+  <img src="https://raw.githubusercontent.com/gollmkit/gollmkit/main/assets/logo.jpg" alt="GoLLMKit Logo" width="400">
+  
+  # GoLLMKit
+  
+  **Unified LLM Provider Management for Go**
+  
+  [![Go Version](https://img.shields.io/badge/Go-1.19+-00ADD8?style=flat&logo=go)](https://golang.org)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  [![Go Report Card](https://goreportcard.com/badge/github.com/gollmkit/gollmkit)](https://goreportcard.com/report/github.com/gollmkit/gollmkit)
+  [![Documentation](https://godoc.org/github.com/gollmkit/gollmkit?status.svg)](https://godoc.org/github.com/gollmkit/gollmkit)
+  
+</div>
 
 A comprehensive Go library for managing multiple LLM (Large Language Model) providers with intelligent API key management, rotation strategies, and unified interfaces. GoLLMKit simplifies working with OpenAI, Anthropic, Google Gemini, and other LLM providers while providing enterprise-grade features like cost optimization, health monitoring, and secure key management.
 
