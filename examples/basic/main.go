@@ -8,6 +8,7 @@ import (
 
 	"github.com/gollmkit/gollmkit/internal/auth"
 	"github.com/gollmkit/gollmkit/internal/config"
+	"github.com/gollmkit/gollmkit/internal/providers"
 )
 
 func main() {
@@ -24,32 +25,80 @@ func main() {
 	}
 	defer keyStore.Close()
 
-	// Create key rotator
+	// Create key rotator and validator
 	rotator := auth.NewKeyRotator(cfg, keyStore)
+	validator := auth.NewKeyValidator()
 
 	ctx := context.Background()
 
-	// Example 1: Get next key for OpenAI
-	fmt.Println("=== OpenAI Key Rotation Example ===")
-	demonstrateKeyRotation(ctx, rotator, "openai", 5)
+	// Create unified provider
+	provider := providers.NewUnifiedProvider(cfg, rotator, validator)
 
-	// Example 2: Get next key for Anthropic
-	fmt.Println("\n=== Anthropic Key Rotation Example ===")
+	// Example 1: Simple completion with OpenAI
+	fmt.Println("=== OpenAI Completion Example ===")
+	opts := providers.DefaultOptions(providers.OpenAI)
+	opts.MaxTokens = 50
+	opts.Temperature = 0.7
+	resp, err := provider.Invoke(ctx, "Tell me a short joke", opts)
+	if err != nil {
+		log.Printf("OpenAI error: %v", err)
+	} else {
+		fmt.Printf("OpenAI Response: %s\n", resp.Content)
+		fmt.Printf("Model: %s, Tokens: %d\n", resp.Model, resp.Usage.TotalTokens)
+	}
+
+	// Example 2: Chat with Anthropic
+	fmt.Println("\n=== Anthropic Chat Example ===")
+	messages := []providers.Message{
+		{Role: "system", Content: "You are a helpful assistant."},
+		{Role: "user", Content: "What's the capital of France?"},
+	}
+	anthropicOpts := providers.RequestOptions{
+		Provider:    providers.Anthropic,
+		Model:       "claude-3-sonnet-20240229",
+		Temperature: 0.5,
+	}
+	resp, err = provider.Chat(ctx, messages, anthropicOpts)
+	if err != nil {
+		log.Printf("Anthropic error: %v", err)
+	} else {
+		fmt.Printf("Anthropic Response: %s\n", resp.Content)
+		fmt.Printf("Model: %s, Tokens: %d\n", resp.Model, resp.Usage.TotalTokens)
+	}
+
+	// Example 3: Using Gemini
+	fmt.Println("\n=== Gemini Example ===")
+	geminiOpts := providers.DefaultOptions(providers.Gemini)
+	geminiOpts.MaxTokens = 100
+	geminiOpts.Temperature = 0.3
+	resp, err = provider.Invoke(ctx, "Explain quantum computing in simple terms", geminiOpts)
+	if err != nil {
+		log.Printf("Gemini error: %v", err)
+	} else {
+		fmt.Printf("Gemini Response: %s\n", resp.Content)
+		fmt.Printf("Model: %s, Tokens: %d\n", resp.Model, resp.Usage.TotalTokens)
+	}
+
+	// Example 4: Key Rotation Example
+	fmt.Println("\n=== Key Rotation Example ===")
+	fmt.Println("OpenAI Key Rotation:")
+	demonstrateKeyRotation(ctx, rotator, "openai", 3)
+	fmt.Println("\nAnthropic Key Rotation:")
 	demonstrateKeyRotation(ctx, rotator, "anthropic", 3)
 
-	// Example 3: Validate all keys
+	// Example 5: Key Validation Example
 	fmt.Println("\n=== Key Validation Example ===")
 	demonstrateKeyValidation(ctx, keyStore, cfg)
 
-	// Example 4: Track usage and costs
+	// Example 6: Track usage and costs
 	fmt.Println("\n=== Usage Tracking Example ===")
 	demonstrateUsageTracking(ctx, rotator)
 
-	// Example 5: Health checking
+	// Example 7: Health checking
 	fmt.Println("\n=== Health Checking Example ===")
 	demonstrateHealthChecking(ctx, keyStore, cfg)
 
-	// Example 6: Statistics
+	// Example 8: Statistics
 	fmt.Println("\n=== Statistics Example ===")
 	demonstrateStatistics(ctx, rotator)
 }
