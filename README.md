@@ -1,47 +1,97 @@
-# GoLLMKit API Key Management System
+# GoLLMKit
 
-This document describes the API key management feature implementation for GoLLM, focusing on secure key storage, intelligent rotation strategies, and comprehensive validation.
+[![Go Version](https://img.shields.io/badge/Go-1.19+-00ADD8?style=flat&logo=go)](https://golang.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Go Report Card](https://goreportcard.com/badge/github.com/gollmkit/gollmkit)](https://goreportcard.com/report/github.com/gollmkit/gollmkit)
+[![Documentation](https://godoc.org/github.com/gollmkit/gollmkit?status.svg)](https://godoc.org/github.com/gollmkit/gollmkit)
+
+A comprehensive Go library for managing multiple LLM (Large Language Model) providers with intelligent API key management, rotation strategies, and unified interfaces. GoLLMKit simplifies working with OpenAI, Anthropic, Google Gemini, and other LLM providers while providing enterprise-grade features like cost optimization, health monitoring, and secure key management.
+
+## 📋 Table of Contents
+
+- [Features](#-features)
+- [Installation](#-installation)
+- [Quick Start](#-quick-start)
+- [Configuration](#-configuration)
+- [Usage](#-usage)
+  - [Basic Usage](#basic-usage)
+  - [Advanced Examples](#advanced-examples)
+- [Key Management](#-key-management)
+  - [Rotation Strategies](#rotation-strategies)
+  - [Health Monitoring](#health-monitoring)
+  - [Usage Tracking](#usage-tracking)
+- [Providers](#-providers)
+- [Security](#-security)
+- [API Reference](#-api-reference)
+- [Examples](#-examples)
+- [Contributing](#-contributing)
+- [License](#-license)
+
+## ✨ Features
+
+### 🔑 **Intelligent Key Management**
+
+- **Multiple API Keys**: Support for multiple keys per provider with automatic rotation
+- **Smart Rotation**: 5 different rotation strategies (round-robin, least-used, cost-optimized, random, single)
+- **Health Monitoring**: Automatic key validation and health checks
+- **Usage Tracking**: Real-time monitoring of requests, tokens, and costs
+
+### 🔒 **Enterprise Security**
+
+- **Encrypted Storage**: AES-GCM encryption for stored API keys
+- **Environment Integration**: Secure key loading from environment variables
+- **Access Control**: Fine-grained permissions and validation
+
+### 🚀 **Multi-Provider Support**
+
+- **OpenAI**: GPT-3.5, GPT-4, and newer models
+- **Anthropic**: Claude 3 Sonnet, Haiku, and Opus
+- **Google Gemini**: Gemini Pro, Vision, and Flash models
+- **Unified Interface**: Single API for all providers
+
+### 📊 **Cost & Performance Optimization**
+
+- **Cost Tracking**: Real-time cost monitoring with configurable limits
+- **Rate Limiting**: Built-in rate limiting per key
+- **Fallback Chains**: Automatic provider failover
+- **Load Balancing**: Intelligent request distribution
+
+## 📦 Installation
+
+```bash
+go get github.com/gollmkit/gollmkit
+```
+
+### Requirements
+
+- Go 1.19 or higher
+- Valid API keys for desired LLM providers
 
 ## 🚀 Quick Start
 
-### 1. Installation
+### 1. Create Configuration File
 
-```bash
-go mod init your-project
-go get github.com/gollm
-```
-
-### 2. Configuration Setup
-
-Create a `gollm-config.yaml` file:
+Create a `gollmkit-config.yaml` file in your project root:
 
 ```yaml
 providers:
   openai:
     api_keys:
-      - key: "sk-proj-example1..."
+      - key: "sk-proj-your-key-here..."
         name: "primary"
         rate_limit: 1000
         cost_limit: 100.0
         enabled: true
-      - key: "sk-proj-example2..."
-        name: "secondary"
-        rate_limit: 800
-        cost_limit: 75.0
-        enabled: true
     rotation:
       strategy: "round_robin"
       interval: "1h"
-      health_check: true
-      fallback_enabled: true
 
 global:
   encrypt_keys: true
-  key_validation: true
   daily_cost_limit: 500.0
 ```
 
-### 3. Basic Usage
+### 2. Basic Implementation
 
 ```go
 package main
@@ -63,7 +113,7 @@ func main() {
         log.Fatal(err)
     }
 
-    // Create key store, rotator and validator
+    // Initialize components
     keyStore, err := auth.NewKeyStoreFromConfig(cfg)
     if err != nil {
         log.Fatal(err)
@@ -73,394 +123,53 @@ func main() {
     rotator := auth.NewKeyRotator(cfg, keyStore)
     validator := auth.NewKeyValidator()
 
-    ctx := context.Background()
-
-    // Create unified provider for all LLM interactions
+    // Create unified provider
     provider := providers.NewUnifiedProvider(cfg, rotator, validator)
 
-    // Example 1: Simple completion with OpenAI
-    // Option values are resolved in this order:
-    // 1. Values specified in the RequestOptions
-    // 2. Values from gollmkit-config.yaml
-    // 3. Default values from providers.DefaultOptions()
-    
-    // Using mostly configuration values with a few overrides
-    opts := providers.RequestOptions{
-        Provider: providers.OpenAI,
-        // Model will be taken from config if not specified
-        MaxTokens: 50, // Override the config value
-    }
-    resp, err := provider.Invoke(ctx, "Tell me a short joke", opts)
-    if err != nil {
-        log.Printf("OpenAI error: %v", err)
-    } else {
-        fmt.Printf("Response: %s\n", resp.Content)
-        fmt.Printf("Model: %s, Tokens: %d\n", resp.Model, resp.Usage.TotalTokens)
-    }
-
-    // Example 2: Chat with Anthropic
-    messages := []providers.Message{
-        {Role: "system", Content: "You are a helpful assistant."},
-        {Role: "user", Content: "What's the capital of France?"},
-    }
-    // Using specific values, overriding config
-    resp, err = provider.Chat(ctx, messages, providers.RequestOptions{
-        Provider:    providers.Anthropic,
-        Model:       "claude-3-sonnet-20240229", // Override model from config
-        Temperature: 0.5,                        // Override temperature
-        // MaxTokens will be taken from config
-    })
-    if err != nil {
-        log.Printf("Anthropic error: %v", err)
-    } else {
-        fmt.Printf("Response: %s\n", resp.Content)
-        fmt.Printf("Model: %s, Tokens: %d\n", resp.Model, resp.Usage.TotalTokens)
-    }
-
-    // Example 3: Using Gemini
-    fmt.Println("\n=== Gemini Example ===")
-    // Example of three different ways to specify options:
-
-    // 1. Using config values with minimal overrides
-    geminiOpts := providers.RequestOptions{
-        Provider: providers.Gemini,
-        // All other values from config
-    }
-
-    // 2. Using DefaultOptions as fallback with config values
-    geminiOptsWithDefaults := providers.DefaultOptions(providers.Gemini)
-    // Config values will override defaults where specified
-
-    // 3. Fully custom options ignoring config defaults
-    geminiCustomOpts := providers.RequestOptions{
-        Provider:    providers.Gemini,
-        Model:       "gemini-2.0-flash",
-        MaxTokens:   100,
-        Temperature: 0.3,
-        // No config values will be used
-    }
-
-    // Simple completion with default options
-    resp, err = provider.Invoke(ctx, "Explain quantum computing in simple terms", geminiOpts)
-    if err != nil {
-        log.Printf("Gemini error: %v", err)
-    } else {
-        fmt.Printf("Gemini Response: %s\n", resp.Content)
-        fmt.Printf("Model: %s, Tokens: %d\n", resp.Model, resp.Usage.TotalTokens)
-    }
-
-    // Chat with custom options
-    geminiMessages := []providers.Message{
-        {Role: "user", Content: "What are the key differences between quantum and classical computers?"},
-    }
-    resp, err = provider.Chat(ctx, geminiMessages, geminiCustomOpts)
-    if err != nil {
-        log.Printf("Gemini chat error: %v", err)
-    } else {
-        fmt.Printf("Gemini Chat Response: %s\n", resp.Content)
-        fmt.Printf("Model: %s, Tokens: %d\n", resp.Model, resp.Usage.TotalTokens)
-    }
-}
     ctx := context.Background()
-    selection, err := rotator.GetNextKey(ctx, "openai")
+
+    // Simple completion
+    response, err := provider.Invoke(ctx, "Tell me a joke", providers.RequestOptions{
+        Provider: providers.OpenAI,
+        Model:    "gpt-3.5-turbo",
+        MaxTokens: 100,
+    })
+
     if err != nil {
         log.Fatal(err)
     }
 
-    log.Printf("Selected key: %s, Strategy: %s",
-        selection.KeyName, selection.Strategy)
+    fmt.Printf("Response: %s\n", response.Content)
+    fmt.Printf("Tokens used: %d\n", response.Usage.TotalTokens)
 }
 ```
 
-## 🏗️ Architecture Overview
+## ⚙️ Configuration
 
-### Core Components
+### Configuration Structure
 
-1. **Configuration System** (`internal/config/`)
+GoLLMKit uses a hierarchical configuration system with three levels of precedence:
 
-   - YAML-based configuration with Viper
-   - Environment variable overrides
-   - Comprehensive validation
-
-2. **Key Storage** (`internal/auth/keystore.go`)
-
-   - Secure encrypted storage
-   - In-memory implementation (extensible to database)
-   - Usage tracking and statistics
-
-3. **Key Rotation** (`internal/auth/rotation.go`)
-
-   - Multiple rotation strategies
-   - Intelligent failover
-   - Cost optimization
-
-4. **Key Validation** (`internal/auth/validator.go`)
-   - Format validation
-   - Live API validation
-   - Health monitoring
-
-## 🎯 Key Features and Examples
-
-### 1. Unified Provider Interface
-
-The unified provider interface simplifies interactions with different LLM providers:
-
-```go
-provider := providers.NewUnifiedProvider(cfg, rotator, validator)
-
-// Use default options for each provider
-openaiOpts := providers.DefaultOptions(providers.OpenAI)
-anthropicOpts := providers.DefaultOptions(providers.Anthropic)
-geminiOpts := providers.DefaultOptions(providers.Gemini)
-
-// Single prompt completion
-resp, err := provider.Invoke(ctx, prompt, openaiOpts)
-
-// Chat completion
-resp, err = provider.Chat(ctx, messages, anthropicOpts)
-```
-
-### 2. Key Management Features
-
-#### A. Key Rotation
-
-```go
-// Demonstrate key rotation with different strategies
-func ExampleKeyRotation(ctx context.Context, rotator *auth.KeyRotator) {
-    // Get next key using configured rotation strategy
-    selection, err := rotator.GetNextKey(ctx, "openai")
-    if err != nil {
-        log.Fatal(err)
-    }
-    fmt.Printf("Selected: %s, Strategy: %s\n",
-        selection.KeyName, selection.Strategy)
-}
-```
-
-#### B. Key Validation
-
-```go
-// Validate all configured keys
-func ExampleKeyValidation(ctx context.Context, keyStore auth.KeyStore, cfg *config.Config) {
-    validator := auth.NewKeyValidator()
-
-    // Get all provider keys
-    providers := make(map[string][]string)
-    for provider := range cfg.Providers {
-        keys, _ := keyStore.ListKeys(ctx, provider)
-        providers[provider] = keys
-    }
-
-    // Validate all keys
-    results, _ := validator.ValidateAllKeys(ctx, keyStore, providers)
-    for provider, validations := range results {
-        for key, result := range validations {
-            fmt.Printf("%s.%s: %v - %s\n",
-                provider, key, result.Valid, result.Message)
-        }
-    }
-}
-```
-
-#### C. Usage Tracking
-
-```go
-// Track and monitor key usage
-func ExampleUsageTracking(ctx context.Context, rotator *auth.KeyRotator) {
-    // Record usage for a key
-    err := rotator.RecordUsage(ctx, "openai", "primary", 1000, 0.03)
-    if err != nil {
-        log.Printf("Error recording usage: %v", err)
-    }
-
-    // Get usage statistics
-    stats, _ := rotator.GetKeyStatistics(ctx, "openai")
-    for key, usage := range stats {
-        fmt.Printf("Key: %s\n", key)
-        fmt.Printf("  Requests: %d\n", usage.UsageCount)
-        fmt.Printf("  Tokens: %d\n", usage.TokensUsed)
-        fmt.Printf("  Cost: $%.3f\n", usage.CostUsed)
-    }
-}
-```
-
-#### D. Health Monitoring
-
-```go
-// Monitor key health
-func ExampleHealthMonitoring(ctx context.Context, keyStore auth.KeyStore) {
-    checker := auth.NewHealthChecker(keyStore, 5*time.Minute)
-
-    // Get current health status
-    providers := map[string][]string{
-        "openai": {"primary", "secondary"},
-        "anthropic": {"primary"},
-    }
-
-    status, _ := checker.GetHealthStatus(ctx, providers)
-    for provider, keys := range status {
-        for key, healthy := range keys {
-            fmt.Printf("%s.%s: %v\n", provider, key, healthy)
-        }
-    }
-
-    // In production, start continuous monitoring:
-    // go checker.Start(ctx, providers)
-}
-```
-
-## 🔄 Rotation Strategies
-
-### 1. Round Robin (`round_robin`)
-
-Cycles through keys in order, ensuring even distribution.
-
-```yaml
-rotation:
-  strategy: "round_robin"
-  interval: "1h"
-```
-
-**Use Case**: Equal load distribution across all keys.
-
-### 2. Least Used (`least_used`)
-
-Selects the key with the lowest usage count.
-
-```yaml
-rotation:
-  strategy: "least_used"
-  interval: "30m"
-```
-
-**Use Case**: Balancing usage when keys have different capacities.
-
-### 3. Cost Optimized (`cost_optimized`)
-
-Chooses the key with the lowest current daily cost.
-
-```yaml
-rotation:
-  strategy: "cost_optimized"
-  interval: "15m"
-```
-
-**Use Case**: Minimizing overall costs across multiple keys.
-
-### 4. Random (`random`)
-
-Randomly selects from available keys.
-
-```yaml
-rotation:
-  strategy: "random"
-```
-
-**Use Case**: Avoiding predictable patterns.
-
-### 5. Single Key (`single`)
-
-Always uses the first available key.
-
-```yaml
-rotation:
-  strategy: "single"
-```
-
-**Use Case**: Simple setups with backup keys only.
-
-## 🔒 Security Features
-
-### Encryption
-
-- AES-GCM encryption for stored keys
-- SHA256-based key derivation
-- Configurable encryption password
-
-### Key Validation
-
-- Format validation for all providers
-- Live API validation
-- Health status tracking
-
-### Environment Integration
-
-```bash
-# Override keys via environment variables
-export GOLLM_OPENAI_API_KEY_PRIMARY="sk-proj-newkey..."
-export GOLLM_ANTHROPIC_API_KEY_PRIMARY="sk-ant-newkey..."
-```
-
-## 📊 Usage Tracking & Analytics
-
-### Key Usage Statistics
-
-```go
-// Get usage statistics for a provider
-stats, err := rotator.GetKeyStatistics(ctx, "openai")
-for keyName, usage := range stats {
-    fmt.Printf("Key: %s, Requests: %d, Cost: $%.3f\n",
-        keyName, usage.UsageCount, usage.CostUsed)
-}
-```
-
-### Provider Statistics
-
-```go
-// Get aggregated provider statistics
-providerStats, err := rotator.GetProviderStatistics(ctx, "openai")
-fmt.Printf("Total Cost: $%.2f, Healthy Keys: %d/%d\n",
-    providerStats.TotalCost,
-    providerStats.HealthyKeys,
-    providerStats.TotalKeys)
-```
-
-## 🏥 Health Monitoring
-
-### Automated Health Checks
-
-```go
-// Create and start health checker
-healthChecker := auth.NewHealthChecker(keyStore, 5*time.Minute)
-
-// Build provider-key mapping
-providers := make(map[string][]string)
-for providerName := range cfg.Providers {
-    keyNames, _ := keyStore.ListKeys(ctx, providerName)
-    providers[providerName] = keyNames
-}
-
-// Start health monitoring (in production)
-go healthChecker.Start(ctx, providers)
-```
-
-### Health Status Check
-
-```go
-healthStatus, err := healthChecker.GetHealthStatus(ctx, providers)
-for provider, keys := range healthStatus {
-    for keyName, healthy := range keys {
-        status := "✓ Healthy"
-        if !healthy {
-            status = "✗ Unhealthy"
-        }
-        fmt.Printf("%s.%s: %s\n", provider, keyName, status)
-    }
-}
-```
-
-## 🛠️ Configuration Reference
+1. **Request Options** (highest priority)
+2. **Configuration File** (medium priority)
+3. **Default Values** (fallback)
 
 ### Complete Configuration Example
 
 ```yaml
+# Provider-specific settings
 providers:
   openai:
     api_keys:
       - key: "sk-proj-example1..."
         name: "primary"
-        rate_limit: 1000 # requests per hour
-        cost_limit: 100.0 # dollars per day
+        rate_limit: 1000 # requests/hour
+        cost_limit: 100.0 # USD/day
+        enabled: true
+      - key: "sk-proj-example2..."
+        name: "secondary"
+        rate_limit: 800
+        cost_limit: 75.0
         enabled: true
 
     models:
@@ -471,63 +180,32 @@ providers:
         enabled: true
 
     rotation:
-      strategy: "round_robin"
-      interval: "1h"
-      health_check: true
-      fallback_enabled: true
+      strategy: "round_robin" # round_robin, least_used, cost_optimized, random, single
+      interval: "1h" # rotation check interval
+      health_check: true # enable health monitoring
+      fallback_enabled: true # enable automatic failover
 
   anthropic:
     api_keys:
-      - key: "sk-ant-example1..."
+      - key: "sk-ant-example..."
         name: "primary"
         rate_limit: 500
         cost_limit: 80.0
         enabled: true
 
-    models:
-      - name: "claude-3-sonnet-20240229"
-        input_cost_per_1k_tokens: 0.003
-        output_cost_per_1k_tokens: 0.015
-        max_tokens: 4096
-        enabled: true
-
     rotation:
       strategy: "least_used"
       interval: "30m"
-      health_check: true
-      fallback_enabled: true
 
   gemini:
     api_keys:
-      - key: "YOUR_GEMINI_API_KEY..."
+      - key: "your-gemini-key..."
         name: "primary"
         rate_limit: 600
         cost_limit: 50.0
         enabled: true
-      - key: "YOUR_BACKUP_GEMINI_KEY..."
-        name: "backup"
-        rate_limit: 400
-        cost_limit: 30.0
-        enabled: true
 
-    models:
-      - name: "gemini-2.0-flash"
-        input_cost_per_1k_tokens: 0.001
-        output_cost_per_1k_tokens: 0.002
-        max_tokens: 32768
-        enabled: true
-      - name: "gemini-pro-vision"
-        input_cost_per_1k_tokens: 0.002
-        output_cost_per_1k_tokens: 0.003
-        max_tokens: 16384
-        enabled: true
-
-    rotation:
-      strategy: "cost_optimized"
-      interval: "15m"
-      health_check: true
-      fallback_enabled: true
-
+# Global settings
 global:
   fallback_chain: ["openai", "anthropic", "gemini"]
   global_rate_limit: 2000
@@ -536,213 +214,471 @@ global:
   encrypt_keys: true
   key_validation: true
   audit_logging: true
-  default_rotation_strategy: "round_robin"
   health_check_interval: "5m"
   key_timeout: "30s"
 ```
 
-### Configuration Value Resolution
-
-The library uses a three-tier system for resolving configuration values:
-
-1. **Request-Level Options**: Values specified in `RequestOptions` when calling methods
-   ```go
-   opts := providers.RequestOptions{
-       Model: "gpt-4",        // This takes highest precedence
-       Temperature: 0.7,      // This will override config
-   }
-   ```
-
-2. **Configuration File Values**: Values from `gollmkit-config.yaml`
-   ```yaml
-   providers:
-     openai:
-       models:
-         - name: "gpt-4"
-           max_tokens: 8192   # Used if not in RequestOptions
-           temperature: 0.5   # Overridden by RequestOptions
-   ```
-
-3. **Default Values**: From `providers.DefaultOptions()`
-   ```go
-   // Used only if not specified in RequestOptions or config
-   defaults := providers.DefaultOptions(providers.OpenAI)
-   // defaults.Model = "gpt-3.5-turbo"
-   // defaults.Temperature = 0.7
-   // defaults.MaxTokens = 2000
-   ```
-
-This allows for flexible configuration:
-- Use config file for organization-wide settings
-- Override specific values per request
-- Have sensible defaults for unspecified values
-
-### Configuration Fields
-
-#### API Key Configuration
-
-- `key`: The actual API key
-- `name`: Friendly name for the key
-- `rate_limit`: Requests per hour limit
-- `cost_limit`: Daily cost limit in dollars
-- `enabled`: Whether the key is active
-
-#### Rotation Configuration
-
-- `strategy`: Rotation algorithm to use
-- `interval`: How often to consider rotation
-- `health_check`: Enable health validation
-- `fallback_enabled`: Enable automatic failover
-
-#### Global Settings
-
-- `fallback_chain`: Provider priority order
-- `encrypt_keys`: Enable key encryption
-- `key_validation`: Enable validation
-- `daily_cost_limit`: Global cost limit
-
-## 🧪 Testing Strategy
-
-### Unit Tests
+### Environment Variable Override
 
 ```bash
-# Run unit tests
-go test ./internal/config/...
-go test ./internal/auth/...
+# Override API keys securely
+export GOLLM_OPENAI_API_KEY_PRIMARY="sk-proj-your-key..."
+export GOLLM_ANTHROPIC_API_KEY_PRIMARY="sk-ant-your-key..."
+export GOLLM_GEMINI_API_KEY_PRIMARY="your-gemini-key..."
 ```
 
-### Integration Tests
+## 💻 Usage
 
-```bash
-# Test with actual API keys (use test keys)
-go run examples/basic/main.go
-```
+### Basic Usage
 
-### Load Testing
+#### Simple Text Completion
 
 ```go
-// Simulate concurrent key requests
-func TestConcurrentKeyRotation(t *testing.T) {
-    // Implementation for testing concurrent access
+// Using OpenAI
+response, err := provider.Invoke(ctx, "Explain quantum computing", providers.RequestOptions{
+    Provider:    providers.OpenAI,
+    Model:       "gpt-4",
+    MaxTokens:   200,
+    Temperature: 0.7,
+})
+
+// Using Anthropic
+response, err = provider.Invoke(ctx, "Write a haiku about programming", providers.RequestOptions{
+    Provider: providers.Anthropic,
+    Model:    "claude-3-sonnet-20240229",
+})
+```
+
+#### Chat Completion
+
+```go
+messages := []providers.Message{
+    {Role: "system", Content: "You are a helpful coding assistant."},
+    {Role: "user", Content: "How do I implement a binary search in Go?"},
+}
+
+response, err := provider.Chat(ctx, messages, providers.RequestOptions{
+    Provider:    providers.OpenAI,
+    Model:       "gpt-4",
+    MaxTokens:   500,
+    Temperature: 0.3,
+})
+```
+
+### Advanced Examples
+
+#### Multi-Provider Fallback
+
+```go
+// Try OpenAI first, fallback to Anthropic if it fails
+providers := []providers.ProviderType{providers.OpenAI, providers.Anthropic}
+
+for _, prov := range providers {
+    response, err := provider.Invoke(ctx, prompt, providers.RequestOptions{
+        Provider: prov,
+        Model:    getModelForProvider(prov),
+    })
+
+    if err == nil {
+        fmt.Printf("Success with %s: %s\n", prov, response.Content)
+        break
+    }
+    log.Printf("Provider %s failed: %v", prov, err)
 }
 ```
 
-## 🚀 Running the Example
+#### Streaming Responses
 
-1. **Setup Configuration**:
+```go
+stream, err := provider.InvokeStream(ctx, "Tell me a long story", providers.RequestOptions{
+    Provider: providers.OpenAI,
+    Model:    "gpt-4",
+    Stream:   true,
+})
 
-   ```bash
-   cp gollm-config.yaml.example gollm-config.yaml
-   # Edit with your actual API keys
-   ```
+if err != nil {
+    log.Fatal(err)
+}
 
-2. **Set Environment Variables** (optional):
-
-   ```bash
-   export GOLLM_OPENAI_API_KEY_PRIMARY="your-openai-key"
-   export GOLLM_ANTHROPIC_API_KEY_PRIMARY="your-anthropic-key"
-   ```
-
-3. **Run Example**:
-   ```bash
-   cd examples/basic
-   go run main.go
-   ```
-
-## 🎯 Expected Output
-
-```
-=== OpenAI Completion Example ===
-OpenAI Response: Why did the scarecrow win an award? Because he was outstanding in his field!
-Model: gpt-3.5-turbo, Tokens: 28
-
-=== Anthropic Chat Example ===
-Anthropic Response: The capital of France is Paris.
-Model: claude-3-sonnet-20240229, Tokens: 15
-
-=== Gemini Example ===
-Gemini Response: Quantum computing is like having a super-powerful calculator that can solve certain complex problems much faster than regular computers. Instead of using regular bits (0s and 1s), it uses quantum bits or "qubits" that can exist in multiple states at once, kind of like being able to be in multiple places at the same time.
-Model: gemini-2.0-flash, Tokens: 42
-
-Gemini Chat Response: Here are the key differences between quantum and classical computers:
-1. Information Storage: Classical computers use bits (0 or 1), while quantum computers use qubits that can exist in multiple states simultaneously.
-2. Processing Power: Quantum computers can solve certain complex problems exponentially faster.
-3. Error Handling: Classical computers are more stable, while quantum computers are more sensitive to environmental factors.
-4. Applications: Classical computers excel at everyday tasks, while quantum computers are better for specific problems like cryptography and molecular modeling.
-Model: gemini-2.0-flash, Tokens: 89
-
-=== Key Rotation Example ===
-Provider: openai
-  Iteration 1: Key=primary, Strategy=round_robin, LastUsed=14:30:15
-  Iteration 2: Key=secondary, Strategy=round_robin, LastUsed=14:30:16
-
-=== Key Validation Example ===
-Provider: openai
-  primary: ✓ Valid - Key is valid and active
-  secondary: ✓ Valid - Key is valid and active
-Provider: anthropic
-  primary: ✓ Valid - Key is valid and active
-
-=== Usage Tracking Example ===
-Provider: openai, Key: primary
-  Recorded: Small completion - 1500 tokens, $0.045
-  Recorded: Medium completion - 3000 tokens, $0.090
-  Recorded: Quick query - 500 tokens, $0.015
-  Total usage: 3 requests, 5000 tokens, $0.150 cost
-
-=== Health Status Example ===
-Provider: openai
-  primary: ✓ Healthy
-  secondary: ✓ Healthy
-Provider: anthropic
-  primary: ✓ Healthy
-
-=== Statistics Example ===
-Provider: openai
-  Total Keys: 2
-  Healthy Keys: 2
-  Total Cost: $0.150
-  Total Tokens: 5000
-  Total Requests: 3
-    primary: Healthy, 2 requests, $0.105 cost
-    secondary: Healthy, 1 requests, $0.045 cost
-  Rotation Strategy: round_robin
-  Current Index: 1
+for chunk := range stream {
+    if chunk.Error != nil {
+        log.Printf("Stream error: %v", chunk.Error)
+        break
+    }
+    fmt.Print(chunk.Content)
+}
 ```
 
-## 🛡️ Production Considerations
+## 🔑 Key Management
 
-### Security Best Practices
+### Rotation Strategies
+
+#### 1. Round Robin
+
+Cycles through keys evenly:
+
+```yaml
+rotation:
+  strategy: "round_robin"
+  interval: "1h"
+```
+
+#### 2. Least Used
+
+Selects key with lowest usage:
+
+```yaml
+rotation:
+  strategy: "least_used"
+  interval: "30m"
+```
+
+#### 3. Cost Optimized
+
+Chooses key with lowest daily cost:
+
+```yaml
+rotation:
+  strategy: "cost_optimized"
+  interval: "15m"
+```
+
+#### 4. Random
+
+Random key selection:
+
+```yaml
+rotation:
+  strategy: "random"
+```
+
+#### 5. Single Key
+
+Uses primary key only:
+
+```yaml
+rotation:
+  strategy: "single"
+```
+
+### Health Monitoring
+
+```go
+// Create health checker
+healthChecker := auth.NewHealthChecker(keyStore, 5*time.Minute)
+
+// Get health status
+providers := map[string][]string{
+    "openai": {"primary", "secondary"},
+    "anthropic": {"primary"},
+}
+
+healthStatus, err := healthChecker.GetHealthStatus(ctx, providers)
+for provider, keys := range healthStatus {
+    for keyName, isHealthy := range keys {
+        status := "✓ Healthy"
+        if !isHealthy {
+            status = "✗ Unhealthy"
+        }
+        fmt.Printf("%s.%s: %s\n", provider, keyName, status)
+    }
+}
+```
+
+### Usage Tracking
+
+```go
+// Record usage
+err := rotator.RecordUsage(ctx, "openai", "primary", 1500, 0.045)
+
+// Get statistics
+stats, err := rotator.GetKeyStatistics(ctx, "openai")
+for keyName, usage := range stats {
+    fmt.Printf("Key: %s\n", keyName)
+    fmt.Printf("  Requests: %d\n", usage.UsageCount)
+    fmt.Printf("  Tokens: %d\n", usage.TokensUsed)
+    fmt.Printf("  Cost: $%.3f\n", usage.CostUsed)
+}
+```
+
+## 🏢 Providers
+
+### Supported Providers
+
+| Provider          | Models                         | Features         |
+| ----------------- | ------------------------------ | ---------------- |
+| **OpenAI**        | GPT-3.5, GPT-4, GPT-4 Turbo    | Chat, Completion |
+| **Anthropic**     | Claude 3 (Sonnet, Haiku, Opus) | Chat, Completion |
+| **Google Gemini** | Gemini Pro, Flash              | Chat, Completion |
+
+### Provider-Specific Configuration
+
+```go
+// OpenAI with specific settings
+openaiOpts := providers.RequestOptions{
+    Provider:     providers.OpenAI,
+    Model:        "gpt-4",
+    Temperature:  0.7,
+    MaxTokens:    2000,
+    TopP:         0.9,
+    TopP:         0.9,
+}
+
+// Anthropic with message options
+anthropicOpts := providers.RequestOptions{
+    Provider:    providers.Anthropic,
+    Model:       "claude-3-sonnet-20240229",
+    MaxTokens:   1000,
+    Temperature: 0.7,
+}
+
+// Gemini with model options
+geminiOpts := providers.RequestOptions{
+    Provider:    providers.Gemini,
+    Model:       "gemini-2.0-flash",
+    MaxTokens:   1500,
+    Temperature: 0.7,
+    TopP:        0.9,
+}
+```
+
+## 🔒 Security
+
+### Key Encryption
+
+Keys are automatically encrypted using AES-GCM:
+
+```go
+// Encryption is enabled by default in configuration
+global:
+  encrypt_keys: true
+```
+
+### Best Practices
 
 1. **Environment Variables**: Store sensitive keys in environment variables
-2. **Encryption**: Always enable key encryption in production
-3. **Access Control**: Limit file permissions on config files
-4. **Audit Logging**: Enable comprehensive logging
+2. **File Permissions**: Restrict access to configuration files
+3. **Audit Logging**: Enable comprehensive request logging
+4. **Key Rotation**: Regularly rotate API keys
+5. **Cost Monitoring**: Set up cost alerts and limits
 
-### Performance Optimization
+### Access Control
 
-1. **Caching**: Key selection results are cached appropriately
-2. **Connection Pooling**: HTTP client reuse for validation
-3. **Concurrent Safety**: All operations are thread-safe
+```go
+// Validate keys before use
+validator := auth.NewKeyValidator()
+result, err := validator.ValidateKey(ctx, keyStore, "openai", "primary")
+if !result.Valid {
+    log.Printf("Key validation failed: %s", result.Message)
+}
+```
 
-### Monitoring & Alerting
+## 📖 API Reference
 
-1. **Cost Monitoring**: Set up alerts for cost thresholds
-2. **Health Monitoring**: Monitor key health status
-3. **Usage Analytics**: Track usage patterns and optimize
+### Core Types
 
-## 🔮 Future Enhancements
+```go
+// Request options for LLM calls
+type RequestOptions struct {
+    Provider         ProviderType
+    Model           string
+    MaxTokens       int
+    Temperature     float64
+    TopP           float64
+    Stream         bool
+    SystemPrompt   string
+}
 
-1. **Database Backend**: PostgreSQL/MySQL support for key storage
-2. **Distributed Locking**: For multi-instance deployments
-3. **Advanced Analytics**: ML-based cost optimization
-4. **Webhook Integration**: Real-time notifications
-5. **Key Lifecycle Management**: Automatic key rotation and renewal
+// Response from LLM providers
+type Response struct {
+    Content    string
+    Model      string
+    Usage      Usage
+    Provider   ProviderType
+    Metadata   map[string]interface{}
+}
+
+// Usage statistics
+type Usage struct {
+    PromptTokens     int
+    CompletionTokens int
+    TotalTokens      int
+    Cost            float64
+}
+```
+
+### Main Interfaces
+
+```go
+// Unified provider interface
+type UnifiedProvider interface {
+    Invoke(ctx context.Context, prompt string, opts RequestOptions) (*Response, error)
+    Chat(ctx context.Context, messages []Message, opts RequestOptions) (*Response, error)
+    InvokeStream(ctx context.Context, prompt string, opts RequestOptions) (<-chan StreamChunk, error)
+}
+
+// Key management interface
+type KeyRotator interface {
+    GetNextKey(ctx context.Context, provider string) (*KeySelection, error)
+    RecordUsage(ctx context.Context, provider, keyName string, tokens int, cost float64) error
+    GetKeyStatistics(ctx context.Context, provider string) (map[string]*KeyUsage, error)
+}
+```
+
+## 📚 Examples
+
+### Complete Working Example
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+
+    "github.com/gollmkit/gollmkit/internal/auth"
+    "github.com/gollmkit/gollmkit/internal/config"
+    "github.com/gollmkit/gollmkit/internal/providers"
+)
+
+func main() {
+    // Initialize GoLLMKit
+    cfg, err := config.LoadConfig("gollmkit-config.yaml")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    keyStore, err := auth.NewKeyStoreFromConfig(cfg)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer keyStore.Close()
+
+    rotator := auth.NewKeyRotator(cfg, keyStore)
+    validator := auth.NewKeyValidator()
+    provider := providers.NewUnifiedProvider(cfg, rotator, validator)
+
+    ctx := context.Background()
+
+    // Example 1: Simple completion
+    fmt.Println("=== Simple Completion ===")
+    response, err := provider.Invoke(ctx, "What is the capital of France?", providers.RequestOptions{
+        Provider: providers.OpenAI,
+        Model:    "gpt-3.5-turbo",
+    })
+    if err != nil {
+        log.Printf("Error: %v", err)
+    } else {
+        fmt.Printf("Answer: %s\n", response.Content)
+        fmt.Printf("Tokens: %d, Cost: $%.4f\n", response.Usage.TotalTokens, response.Usage.Cost)
+    }
+
+    // Example 2: Chat conversation
+    fmt.Println("\n=== Chat Conversation ===")
+    messages := []providers.Message{
+        {Role: "system", Content: "You are a helpful programming tutor."},
+        {Role: "user", Content: "Explain what a closure is in programming."},
+    }
+
+    response, err = provider.Chat(ctx, messages, providers.RequestOptions{
+        Provider:    providers.Anthropic,
+        Model:       "claude-3-sonnet-20240229",
+        MaxTokens:   300,
+        Temperature: 0.7,
+    })
+    if err != nil {
+        log.Printf("Error: %v", err)
+    } else {
+        fmt.Printf("Explanation: %s\n", response.Content)
+    }
+
+    // Example 3: Key rotation demonstration
+    fmt.Println("\n=== Key Rotation ===")
+    for i := 0; i < 3; i++ {
+        selection, err := rotator.GetNextKey(ctx, "openai")
+        if err != nil {
+            log.Printf("Error getting key: %v", err)
+            continue
+        }
+        fmt.Printf("Iteration %d: Using key '%s' with strategy '%s'\n",
+                  i+1, selection.KeyName, selection.Strategy)
+    }
+
+    // Example 4: Usage statistics
+    fmt.Println("\n=== Usage Statistics ===")
+    stats, err := rotator.GetKeyStatistics(ctx, "openai")
+    if err != nil {
+        log.Printf("Error getting stats: %v", err)
+    } else {
+        for keyName, usage := range stats {
+            fmt.Printf("Key '%s': %d requests, %d tokens, $%.4f cost\n",
+                      keyName, usage.UsageCount, usage.TokensUsed, usage.CostUsed)
+        }
+    }
+}
+```
+
+For more examples, see the [examples directory](examples/).
 
 ## 🤝 Contributing
 
-This is the foundational API key management system for GoLLM. Future enhancements will build upon this solid foundation to provide enterprise-grade AI tooling for Go applications.
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+### Development Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/gollmkit/gollmkit.git
+cd gollmkit
+
+# Install dependencies
+go mod tidy
+
+# Run tests
+go test ./...
+
+# Run examples
+go run examples/basic/main.go
+```
+
+### Submitting Changes
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 🐛 Issues and Support
+
+- **Bug Reports**: [GitHub Issues](https://github.com/gollmkit/gollmkit/issues)
+- **Feature Requests**: [GitHub Discussions](https://github.com/gollmkit/gollmkit/discussions)
+- **Documentation**: [Wiki](https://github.com/gollmkit/gollmkit/wiki)
+
+## 🗺️ Roadmap
+
+- [ ] **Database Backend**: PostgreSQL/MySQL support for key storage
+- [ ] **Distributed Locking**: Multi-instance deployment support
+- [ ] **Advanced Analytics**: ML-based cost optimization
+- [ ] **Webhook Integration**: Real-time notifications
+- [ ] **More Providers**: Cohere, Replicate, Hugging Face
+- [ ] **GraphQL API**: Alternative API interface
+- [ ] **Kubernetes Operator**: Native K8s integration
 
 ## 📄 License
 
-MIT License - see LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [OpenAI](https://openai.com) for GPT models
+- [Anthropic](https://anthropic.com) for Claude models
+- [Google](https://ai.google.dev) for Gemini models
+- The Go community for excellent tooling and libraries
+
+---
+
+**GoLLMKit** - Simplifying LLM integration for Go developers
+
+[Documentation](https://godoc.org/github.com/gollmkit/gollmkit) • [Examples](examples/) • [Contributing](CONTRIBUTING.md) • [License](LICENSE)
