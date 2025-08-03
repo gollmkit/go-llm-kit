@@ -31,6 +31,34 @@ type APIKey struct {
 	CostUsed   float64   `yaml:"-" json:"-"`
 }
 
+// ProviderConfig represents a provider's configuration
+type ProviderConfig struct {
+	APIKeys  []APIKey       `yaml:"api_keys" json:"api_keys" mapstructure:"api_keys"`
+	Models   []ModelConfig  `yaml:"models" json:"models" mapstructure:"models"`
+	Rotation RotationConfig `yaml:"rotation" json:"rotation" mapstructure:"rotation"`
+}
+
+// GetModelByName returns a model configuration by name
+func (p *ProviderConfig) GetModelByName(name string) (*ModelConfig, error) {
+	for _, model := range p.Models {
+		if model.Name == name && model.Enabled {
+			return &model, nil
+		}
+	}
+	return nil, fmt.Errorf("model %s not found or not enabled", name)
+}
+
+// GetEnabledModels returns a list of enabled models
+func (p *ProviderConfig) GetEnabledModels() []ModelConfig {
+	var enabled []ModelConfig
+	for _, model := range p.Models {
+		if model.Enabled {
+			enabled = append(enabled, model)
+		}
+	}
+	return enabled
+}
+
 // IsValid checks if the API key is valid and enabled
 func (k *APIKey) IsValid() bool {
 	return k.Enabled && k.Key != "" && k.Name != ""
@@ -82,13 +110,6 @@ func (r *RotationConfig) GetInterval() (time.Duration, error) {
 	return time.ParseDuration(r.Interval)
 }
 
-// ProviderConfig represents a single provider's configuration
-type ProviderConfig struct {
-	APIKeys  []APIKey       `yaml:"api_keys" json:"api_keys" mapstructure:"api_keys"`
-	Models   []ModelConfig  `yaml:"models" json:"models" mapstructure:"models"`
-	Rotation RotationConfig `yaml:"rotation" json:"rotation" mapstructure:"rotation"`
-}
-
 // GetEnabledKeys returns only enabled API keys
 func (p *ProviderConfig) GetEnabledKeys() []APIKey {
 	var enabled []APIKey
@@ -98,27 +119,6 @@ func (p *ProviderConfig) GetEnabledKeys() []APIKey {
 		}
 	}
 	return enabled
-}
-
-// GetEnabledModels returns only enabled models
-func (p *ProviderConfig) GetEnabledModels() []ModelConfig {
-	var enabled []ModelConfig
-	for _, model := range p.Models {
-		if model.Enabled {
-			enabled = append(enabled, model)
-		}
-	}
-	return enabled
-}
-
-// GetModelByName returns a model by name
-func (p *ProviderConfig) GetModelByName(name string) (*ModelConfig, error) {
-	for _, model := range p.Models {
-		if model.Name == name && model.Enabled {
-			return &model, nil
-		}
-	}
-	return nil, fmt.Errorf("model %s not found or disabled", name)
 }
 
 // GlobalConfig represents global configuration settings

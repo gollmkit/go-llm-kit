@@ -79,8 +79,17 @@ func main() {
     provider := providers.NewUnifiedProvider(cfg, rotator, validator)
 
     // Example 1: Simple completion with OpenAI
-    opts := providers.DefaultOptions(providers.OpenAI)
-    opts.MaxTokens = 50
+    // Option values are resolved in this order:
+    // 1. Values specified in the RequestOptions
+    // 2. Values from gollmkit-config.yaml
+    // 3. Default values from providers.DefaultOptions()
+    
+    // Using mostly configuration values with a few overrides
+    opts := providers.RequestOptions{
+        Provider: providers.OpenAI,
+        // Model will be taken from config if not specified
+        MaxTokens: 50, // Override the config value
+    }
     resp, err := provider.Invoke(ctx, "Tell me a short joke", opts)
     if err != nil {
         log.Printf("OpenAI error: %v", err)
@@ -94,10 +103,12 @@ func main() {
         {Role: "system", Content: "You are a helpful assistant."},
         {Role: "user", Content: "What's the capital of France?"},
     }
+    // Using specific values, overriding config
     resp, err = provider.Chat(ctx, messages, providers.RequestOptions{
         Provider:    providers.Anthropic,
-        Model:       "claude-3-sonnet-20240229",
-        Temperature: 0.5,
+        Model:       "claude-3-sonnet-20240229", // Override model from config
+        Temperature: 0.5,                        // Override temperature
+        // MaxTokens will be taken from config
     })
     if err != nil {
         log.Printf("Anthropic error: %v", err)
@@ -108,14 +119,25 @@ func main() {
 
     // Example 3: Using Gemini
     fmt.Println("\n=== Gemini Example ===")
-    // You can either use DefaultOptions
-    geminiOpts := providers.DefaultOptions(providers.Gemini)
-    // Or create custom options
+    // Example of three different ways to specify options:
+
+    // 1. Using config values with minimal overrides
+    geminiOpts := providers.RequestOptions{
+        Provider: providers.Gemini,
+        // All other values from config
+    }
+
+    // 2. Using DefaultOptions as fallback with config values
+    geminiOptsWithDefaults := providers.DefaultOptions(providers.Gemini)
+    // Config values will override defaults where specified
+
+    // 3. Fully custom options ignoring config defaults
     geminiCustomOpts := providers.RequestOptions{
         Provider:    providers.Gemini,
-        Model:       "gemini-2.5-flash",
+        Model:       "gemini-2.0-flash",
         MaxTokens:   100,
         Temperature: 0.3,
+        // No config values will be used
     }
 
     // Simple completion with default options
@@ -518,6 +540,42 @@ global:
   health_check_interval: "5m"
   key_timeout: "30s"
 ```
+
+### Configuration Value Resolution
+
+The library uses a three-tier system for resolving configuration values:
+
+1. **Request-Level Options**: Values specified in `RequestOptions` when calling methods
+   ```go
+   opts := providers.RequestOptions{
+       Model: "gpt-4",        // This takes highest precedence
+       Temperature: 0.7,      // This will override config
+   }
+   ```
+
+2. **Configuration File Values**: Values from `gollmkit-config.yaml`
+   ```yaml
+   providers:
+     openai:
+       models:
+         - name: "gpt-4"
+           max_tokens: 8192   # Used if not in RequestOptions
+           temperature: 0.5   # Overridden by RequestOptions
+   ```
+
+3. **Default Values**: From `providers.DefaultOptions()`
+   ```go
+   // Used only if not specified in RequestOptions or config
+   defaults := providers.DefaultOptions(providers.OpenAI)
+   // defaults.Model = "gpt-3.5-turbo"
+   // defaults.Temperature = 0.7
+   // defaults.MaxTokens = 2000
+   ```
+
+This allows for flexible configuration:
+- Use config file for organization-wide settings
+- Override specific values per request
+- Have sensible defaults for unspecified values
 
 ### Configuration Fields
 

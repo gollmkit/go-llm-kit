@@ -183,21 +183,87 @@ func (p *UnifiedProvider) Invoke(ctx context.Context, prompt string, opts Reques
 	return p.Chat(ctx, messages, opts)
 }
 
+// mergeOptions merges request options with configuration and defaults
+func (p *UnifiedProvider) mergeOptions(provider ProviderType, opts RequestOptions) (RequestOptions, error) {
+	// Get provider configuration
+	providerCfg, err := p.config.GetProvider(string(provider))
+	if err != nil {
+		return opts, fmt.Errorf("%w: %v", ErrInvalidConfig, err)
+	}
+
+	// Start with a clean options struct containing what we know
+	result := RequestOptions{
+		Provider: provider,
+		Model:    opts.Model,
+		// Copy request values as-is - they take highest priority
+		MaxTokens:   opts.MaxTokens,
+		Temperature: opts.Temperature,
+		TopP:        opts.TopP,
+		Stop:        opts.Stop,
+		Stream:      opts.Stream,
+	}
+
+	// Get model configuration if specified
+	var modelCfg *config.ModelConfig
+	if opts.Model != "" {
+		// First try to find the specified model in config
+		modelCfg, err = providerCfg.GetModelByName(opts.Model)
+		if err != nil {
+			// Model not found in config, that's okay, we'll use the user-specified model
+			result.Model = opts.Model
+		}
+	}
+
+	// If no model specified or found, use first enabled model from config
+	if modelCfg == nil && opts.Model == "" {
+		enabledModels := providerCfg.GetEnabledModels()
+		if len(enabledModels) > 0 {
+			modelCfg = &enabledModels[0]
+		}
+	}
+
+	// Apply config values if available for any unset values
+	if modelCfg != nil {
+		if result.Model == "" {
+			result.Model = modelCfg.Name
+		}
+		if result.MaxTokens == 0 {
+			result.MaxTokens = modelCfg.MaxTokens
+		}
+	}
+
+	// Get defaults for this provider
+	defaults := DefaultOptions(provider)
+
+	// Apply defaults for any remaining unset values
+	if result.Model == "" {
+		result.Model = defaults.Model
+	}
+	if result.MaxTokens == 0 {
+		result.MaxTokens = defaults.MaxTokens
+	}
+	if result.Temperature == 0 {
+		result.Temperature = defaults.Temperature
+	}
+	if result.TopP == 0 {
+		result.TopP = defaults.TopP
+	}
+
+	return result, nil
+}
+
 // Chat sends a series of messages to the LLM
 func (p *UnifiedProvider) Chat(ctx context.Context, messages []Message, opts RequestOptions) (*CompletionResponse, error) {
 	if opts.Provider == "" {
 		opts.Provider = OpenAI
 	}
-	defaults := DefaultOptions(opts.Provider)
-	if opts.Model == "" {
-		opts.Model = defaults.Model
+
+	// Merge options with configuration and defaults
+	mergedOpts, err := p.mergeOptions(opts.Provider, opts)
+	if err != nil {
+		return nil, err
 	}
-	if opts.Temperature == 0 {
-		opts.Temperature = defaults.Temperature
-	}
-	if opts.MaxTokens == 0 {
-		opts.MaxTokens = defaults.MaxTokens
-	}
+	opts = mergedOpts
 
 	if err := p.validateModel(opts.Provider, opts.Model); err != nil {
 		return nil, err
