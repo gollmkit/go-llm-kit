@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/gollmkit/gollmkit/main/assets/favlogo.jpg" alt="GoLLMKit Logo" width="250">
+  <img src="https://raw.githubusercontent.com/gollmkit/gollmkit/main/assets/logo_transparent.png" alt="GoLLMKit Logo" width="250">
   
   **Unified LLM Provider Management for Go**
   
